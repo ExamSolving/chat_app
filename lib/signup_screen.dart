@@ -20,25 +20,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
     try {
       setState(() => loading = true);
 
-      // Create user in Firebase Auth
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
             email: emailController.text.trim(),
             password: passwordController.text.trim(),
           );
 
-      // Save user info in Firestore
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .set({
-            'name': nameController.text.trim(),
-            'email': emailController.text.trim(),
-            'uid': userCredential.user!.uid,
-            'createdAt': Timestamp.now(),
-          });
+      final userId = userCredential.user!.uid;
 
-      // Navigate to home or login
+      await FirebaseFirestore.instance.collection('users').doc(userId).set({
+        'name': nameController.text.trim(),
+        'email': emailController.text.trim(),
+        'uid': userId,
+        'profileUrl': '', // default empty
+        'isOnline': true,
+        'lastSeen': FieldValue.serverTimestamp(),
+        'typingTo': '',
+        'createdAt': Timestamp.now(),
+      });
+
       Navigator.pushReplacementNamed(context, '/home');
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'An error occurred';
@@ -90,7 +90,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // Full Name
                   _buildTextField(
                     controller: nameController,
                     label: 'Full Name',
@@ -100,7 +99,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Email
                   _buildTextField(
                     controller: emailController,
                     label: 'Email',
@@ -115,7 +113,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Password
                   _buildTextField(
                     controller: passwordController,
                     label: 'Password',

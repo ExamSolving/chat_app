@@ -1,3 +1,4 @@
+import 'package:chat_app/utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -24,15 +25,16 @@ class _LoginScreenState extends State<LoginScreen> {
           email: emailController.text.trim(),
           password: passwordController.text.trim(),
         );
-        Navigator.pushReplacementNamed(context, '/home');
-      } on FirebaseAuthException catch (e) {
-        String error = 'Login failed';
-        if (e.code == 'user-not-found') {
-          error = 'No user found for that email.';
-        } else if (e.code == 'wrong-password') {
-          error = 'Incorrect password.';
+
+        PresenceHelper.setupUserPresence(
+          FirebaseAuth.instance.currentUser!.uid,
+        );
+
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/home');
         }
-        _showError(error);
+      } on FirebaseAuthException catch (e) {
+        _showError(e.message ?? 'Login failed');
       } finally {
         setState(() => isLoading = false);
       }
@@ -42,49 +44,51 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _loginWithGoogle() async {
     setState(() => isLoading = true);
     try {
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      final googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
         setState(() => isLoading = false);
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
+      final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential = await FirebaseAuth.instance
-          .signInWithCredential(credential);
-      final User? user = userCredential.user;
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(
+        credential,
+      );
 
-      // Save user info to Firestore
+      final user = userCredential.user;
       if (user != null) {
-        final userDoc = FirebaseFirestore.instance
+        final doc = FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid);
-        final docSnapshot = await userDoc.get();
-
-        // Save only if not already exists
-        if (!docSnapshot.exists) {
-          await userDoc.set({
+        if (!(await doc.get()).exists) {
+          await doc.set({
             'uid': user.uid,
             'name': user.displayName ?? '',
             'email': user.email ?? '',
-            'photoURL': user.photoURL ?? '',
+            'profileUrl': user.photoURL ?? '',
             'provider': 'google',
+            'isOnline': true,
+            'lastSeen': FieldValue.serverTimestamp(),
+            'typingTo': '',
             'createdAt': FieldValue.serverTimestamp(),
           });
+        } else {
+          await doc.update({
+            'isOnline': true,
+            'lastSeen': FieldValue.serverTimestamp(),
+          });
         }
-      }
 
-      Navigator.pushReplacementNamed(context, '/home');
-    } on FirebaseAuthException catch (e) {
-      _showError(e.message ?? 'Google Sign-In failed');
+        PresenceHelper.setupUserPresence(user.uid);
+        Navigator.pushReplacementNamed(context, '/home');
+      }
     } catch (e) {
-      _showError('Error: $e');
+      _showError('Google Sign-In failed: $e');
     } finally {
       setState(() => isLoading = false);
     }
